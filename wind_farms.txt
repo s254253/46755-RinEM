@@ -1,0 +1,5 @@
+id,location_node,installed_cap_MW,day_ahead_forecast_MW
+1,3,500,120.54
+2,5,500,115.52
+3,6,500,53.34
+4,21,300,38.16
