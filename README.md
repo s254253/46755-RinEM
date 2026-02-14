@@ -16,4 +16,5 @@ inspiration, check the real bid price data in Nord Pool [link].
 generation data is renewables.ninja.
 • For transmission lines, you may assume a uniform reactance for all lines (e.g., 0.002 p.u.,
 leading to a susceptance of 500 p.u.)
+• In your assignment, assume Pmin = 0. Otherwise, incorporating a non-zero Pmin would require binary variables to model the on/off status of conventional units, avoiding to derive dual variables (including prices). Dual variables can only be obtained when the optimization problem is continuous (i.e., without binary or integer variables). So, please ensure that the lower bound for the production of generation units is set to zero. Also, you can ignore ramping limits if you want.
 """
