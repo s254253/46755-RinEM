@@ -117,6 +117,11 @@ for w in wind_farms.id:
     model.addConstr(pw[w] >= 0, name=f'pw_min_{w}')
     model.addConstr(pw[w] <= w_cap, name=f'pw_max_{w}')
 
+for d in demands.id:
+    d_cons = demands.loc[demands.id == d, 'consumption_MW'].values[0]
+    model.addConstr(pd[d] >= 0, name=f'pd_min_{d}')
+    model.addConstr(pd[d] <= d_cons, name=f'pd_max_{d}')
+
 
 # -------------------------------------------------------------------
 # 7. Solve the optimization problem
