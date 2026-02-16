@@ -15,7 +15,7 @@ wind_farms.rename(columns={'day_ahead_forecast_MW': 'capacity_MW'}, inplace=True
 
 # Demand bid prices (descending, exponential-like from high to low)
 demands['bid_price_per_MWh'] = (
-    (np.exp(-np.linspace(0, 5, len(demands))) - np.exp(-6))
+    (np.exp(-np.linspace(0, 3.5, len(demands))) - np.exp(-6))
     / (1 - np.exp(-6))
     * 200
 )
@@ -45,7 +45,11 @@ demands_sorted = demands.sort_values(
     ascending=False
 ).reset_index(drop=True)
 
-demands_sorted['cum_quantity'] = demands_sorted['consumption_MW'].cumsum()
+demands_sorted['cum_quantity'] = (
+                                demands_sorted['consumption_MW']
+                                .cumsum()
+                                .shift(fill_value=0)
+)
 
 # -------------------------------------------------------------------
 # 4. Build optimization model
@@ -161,20 +165,6 @@ plt.step(
     color='black',
     label='Demand'
 )
-
-plt.scatter(
-    clearing_quantity,
-    market_price,
-    s=120,
-    color='green',
-    edgecolors='black',
-    zorder=5,
-    label=f'Clearing point (Q*={clearing_quantity:.2f} MWh, P*={market_price:.2f} EUR/MWh)'
-)
-
-plt.axvline(clearing_quantity, color='green', linestyle='--', alpha=0.5)
-plt.axhline(market_price, color='green', linestyle='--', alpha=0.5)
-
 plt.xlabel('Quantity (MW)')
 plt.ylabel('Price (EUR/MWh)')
 plt.title('Merit-Order Supply and Demand Curves')
