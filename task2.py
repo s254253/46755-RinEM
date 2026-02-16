@@ -123,13 +123,52 @@ def solve_market(use_storage=True):
             rev = sum(pg[g, t].X * prices[t] for t in HOURS)
             cst = p_total * generators.loc[g, "prod_cost_per_MWh"]
             gen_profits.append({'id': g, 'Produced_MW': p_total, 'Profit': rev - cst})
+        
+        #  Total Operating Cost over 24 hours
+        # Calculate total cost of all thermal generation across all hours (wind cost is 0, so only consider thermal gen)
+        total_op_cost = sum(pg[g, t].X * generators.loc[g, "prod_cost_per_MWh"] 
+                            for g in generators.index for t in HOURS)
+
+        #  Profit of EACH producer (Thermal + Wind)
+        all_producers_profit = []
+
+        # A. conventional generators
+        for g in generators.index:
+            p_total = sum(pg[g, t].X for t in HOURS)
+            rev = sum(pg[g, t].X * prices[t] for t in HOURS)
+            cst = p_total * generators.loc[g, "prod_cost_per_MWh"]
+
+            g_name = generators.iloc[g, 0] if isinstance(generators.iloc[g, 0], str) else f"Gen_{g}"
+            all_producers_profit.append({
+                'Name': g_name,
+                'Type': 'Thermal',
+                'Total_Prod_MWh': p_total,
+                'Revenue': rev,
+                'Cost': cst,
+                'Profit': rev - cst
+            })
+
+        # B. Wind farms
+        for w in wind_farms.index:
+            p_total = sum(pw[w, t].X for t in HOURS)
+            rev = sum(pw[w, t].X * prices[t] for t in HOURS)
+            cst = 0.0 # zero marginal cost for wind
+            w_name = wind_farms.iloc[w, 0] if isinstance(wind_farms.iloc[w, 0], str) else f"Wind_{w}"
+            all_producers_profit.append({
+                'Name': w_name,
+                'Type': 'Wind',
+                'Total_Prod_MWh': p_total,
+                'Revenue': rev,
+                'Cost': cst,
+                'Profit': rev - cst
+            })
             
         # Calculate storage profit (Revenue form Dis - Cost of Ch)
         es_rev = sum(p_dis[t].X * prices[t] for t in HOURS)
         es_cost = sum(p_ch[t].X * prices[t] for t in HOURS)
         es_profit = es_rev - es_cost
 
-        return prices, gen_total, net_storage, soc_level, pd.DataFrame(gen_profits), es_profit, model.ObjVal
+        return prices, gen_total, net_storage, soc_level, pd.DataFrame(gen_profits), pd.DataFrame(all_producers_profit), es_profit, model.ObjVal, total_op_cost
     else:
         return None
 
@@ -144,8 +183,8 @@ print("Now calculating (With Storage)...")
 res_yes = solve_market(use_storage=True)
 
 if res_no and res_yes:
-    price_no, gen_no, _, _, gen_profits_no, _, sw_no = res_no
-    price_yes, gen_yes, net_store_yes, soc_yes, gen_profits_yes, es_profit_yes, sw_yes = res_yes
+    price_no, gen_no, _, _, gen_profits_no, df_profit_no, _, sw_no, cost_no = res_no
+    price_yes, gen_yes, net_store_yes, soc_yes, gen_profits_yes, df_profit_yes, es_profit_yes, sw_yes, cost_yes = res_yes
     
     print("\n" + "="*40)
     print(f"Social Welfare Comparison:")
@@ -177,10 +216,32 @@ if res_no and res_yes:
     # add marginal cost for reference
     df_gen['MC'] = generators['prod_cost_per_MWh']
     print(df_gen.round(2).to_string(index=False))
-
-    # --- present shadow price comparison in tabular form ---
+    
+    # --- Output 3: system cost ---
     print("\n" + "="*50)
-    print("Table 3: Price Comparison")
+    print("Table 3: Total Operating Cost (24h)")
+    print("="*50)
+    print(f"  No Storage System Cost:   €{cost_no:,.2f}")
+    print(f"  With Storage System Cost: €{cost_yes:,.2f}")
+    print(f"  Cost Saving:              €{cost_no - cost_yes:,.2f}")
+
+    # --- Output 4: profit of each producer ---
+    print("\n" + "="*80)
+    print("Table 4: Total Profit of Each Producer (24h) - With Storage Scenario")
+    print("="*80)
+
+    cols = ['Name', 'Type', 'Total_Prod_MWh', 'Revenue', 'Cost', 'Profit']
+    print(df_profit_yes[cols].round(2).to_string(index=False))
+
+    print("\n" + "="*80)
+    print("Compare Total Profit (Wind vs ThermSal) - With Storage")
+    print("="*80)
+    summary_profit = df_profit_yes.groupby('Type')['Profit'].sum().reset_index()
+    print(summary_profit.round(2).to_string(index=False))
+
+    # --- Output5：Shadow price comparison in tabular form ---
+    print("\n" + "="*50)
+    print("Table 5: Price Comparison")
     print("="*50)
     print("\n" + "="*45)
     print(f"{'Hour':<6} {'Price(No ES)':<15} {'Price(With ES)':<15} {'Diff':<10}")
