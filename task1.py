@@ -236,3 +236,48 @@ print(f'Total generation cost: {total_generation_cost:.2f} EUR')
 print(f'Total demand utility:  {total_utility:.2f} EUR')
 print(f'Social welfare:        {social_welfare:.2f} EUR')
 print('================================================\n')
+
+# -------------------------------------------------------------------
+# 14. KKT verification
+# -------------------------------------------------------------------
+
+print("\n================ KKT VERIFICATION (FULL) ================\n")
+
+tolerance = 1e-5
+lambda_dual = power_balance.Pi
+market_price_kkt = -lambda_dual
+
+print(f"Lambda (dual of balance): {lambda_dual:.6f}")
+print(f"Market price from dual:  {market_price_kkt:.6f}\n")
+
+# -----------------------
+# Marginal generator
+# -----------------------
+
+for g in generators.id:
+    output = pg[g].X
+    cap = generators.loc[generators.id == g, 'capacity_MW'].values[0]
+    cost = generators.loc[generators.id == g, 'prod_cost_per_MWh'].values[0]
+
+    if output > tolerance and output < cap - tolerance:
+        print(f"Marginal generator found: {g}")
+        print(f"Cost c_g = {cost:.6f}")
+        print(f"Stationarity implies lambda = -c_g = {-cost:.6f}")
+        print()
+
+# -----------------------
+# Marginal demand
+# -----------------------
+
+for d in demands.id:
+    served = pd[d].X
+    max_d = demands.loc[demands.id == d, 'consumption_MW'].values[0]
+    bid = demands.loc[demands.id == d, 'bid_price_per_MWh'].values[0]
+
+    if served > tolerance and served < max_d - tolerance:
+        print(f"Marginal demand found: {d}")
+        print(f"Bid b_d = {bid:.6f}")
+        print(f"Stationarity implies lambda = -b_d = {-bid:.6f}")
+        print()
+
+print("=========================================================\n")
