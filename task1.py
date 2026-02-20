@@ -216,14 +216,15 @@ total_utility = 0.0
 
 for d in demands.id:
     served = pd[d].X
-    bid = demands.loc[demands.id == d, 'bid_price_per_MWh'].values[0]
-    utility = served * (bid - market_price)
+    utility = demands.loc[demands.id == d, 'bid_price_per_MWh'].values[0] * served
     total_utility += utility
 
     print(
         f' Load {d:2d} | Served: {served:7.2f} MW '
         f'| Utility: {utility:9.2f} EUR'
     )
+
+print(f"Total demand utility: {total_utility:.2f} EUR")
 
 # -------------------------------------------------------------------
 # 13. System-level metrics
