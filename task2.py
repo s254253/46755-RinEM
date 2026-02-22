@@ -11,11 +11,17 @@ base_dir = os.path.dirname(current_script_path)
 
 conventional_generators = os.path.join(base_dir, "conventional_generators.txt")
 wind_farms = os.path.join(base_dir, "wind_farms.txt")
-demands = os.path.join(base_dir, "demands.txt")
+system_demand_file = os.path.join(base_dir, "system_demand.csv")
+node_distribution_file = os.path.join(base_dir, "node_distribution.csv")
 
 generators = pd.read_csv(conventional_generators, sep = ',')
 wind_farms = pd.read_csv(wind_farms, sep = ',')  
-demands = pd.read_csv(demands, sep = ',')
+
+demands = pd.read_csv(node_distribution_file, sep = ',')
+demands['Share'] = demands['Percent_of_System_Load'] / 100.0
+
+sys_demand_df = pd.read_csv(system_demand_file, sep = ',')
+system_demand_MW = sys_demand_df['System_Demand_MW'].values
 
 wind_farms['prod_cost_per_MWh'] = 0.0 
 wind_farms.rename(columns={"day_ahead_forecast_MW": "capacity_MW"}, inplace=True)
@@ -23,8 +29,6 @@ demands["bid_price_per_MWh"] = np.linspace(500, 0, len(demands))
 
 HOURS = list(range(24))
 
-load_profile = np.array([0.6, 0.55, 0.5, 0.5, 0.55, 0.65, 0.75, 0.85, 0.9, 0.95, 1.0, 0.95,
-                         0.9, 0.85, 0.85, 0.85, 0.9, 1.0, 0.95, 0.9, 0.8, 0.7, 0.65, 0.6])
 wind_profile = np.array([0.5293, 0.5927, 0.68,   0.7384, 0.7667, 0.7739, 0.7787, 0.7861, 0.7779, 0.7713,
                          0.7493, 0.7033, 0.6722, 0.652,  0.6368, 0.6462, 0.6351, 0.6358, 0.6582, 0.6725,
                          0.6802, 0.7034, 0.6833, 0.6896])
@@ -59,7 +63,8 @@ def solve_market(use_storage=True):
         
         # 2. Demand Limits
         for d in demands.index:
-            d_val = demands.loc[d, "consumption_MW"] * load_profile[t]
+            # total demand at time t multiplied by node share gives max demand at node d
+            d_val = system_demand_MW[t] * demands.loc[d, "Share"]
             model.addConstr(pd_served[d, t] <= d_val)
 
         # 3. Storage Constraints
