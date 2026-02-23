@@ -30,14 +30,13 @@ demands['bid_price_per_MWh'] = (
     / (1 - np.exp(-6))
     * 200
 )
-
 HOURS = list(range(24))
 
-wind_profile = np.array([0.5293, 0.5927, 0.68,   0.7384, 0.7667, 0.7739, 0.7787, 0.7861, 0.7779, 0.7713,
-                         0.7493, 0.7033, 0.6722, 0.652,  0.6368, 0.6462, 0.6351, 0.6358, 0.6582, 0.6725,
-                         0.6802, 0.7034, 0.6833, 0.6896])
+wind_profile = np.array([0.5293, 0.5927, 0.68, 0.7384, 0.7667, 0.7739, 0.7787, 0.7861, 0.7779, 0.7713,
+ 0.7493, 0.7033, 0.6722, 0.652, 0.6368, 0.6462, 0.6351, 0.6358, 0.6582, 0.6725,
+ 0.6802, 0.7034, 0.6833, 0.6896])
 
-ES_PARAMS = {'cap': 600.0, 'power': 150.0, 'eta_ch': 0.8, 'eta_dis': 0.9, 'soc_ini': 300.0}
+ES_PARAMS = {'cap': 600.0, 'power': 150.0, 'eta_ch': 0.9, 'eta_dis': 0.97, 'soc_ini': 0.0}
 
 # ===================================================================
 # 2. Packaging the Solver Function
@@ -92,8 +91,8 @@ def solve_market(use_storage=True):
         # Save constraint to extract shadow price later
         balance_constrs[t] = model.addConstr(supply == demand)
 
-    if use_storage:
-        model.addConstr(soc[HOURS[-1]] >= ES_PARAMS['soc_ini'])
+        #if use_storage:
+        #    model.addConstr(soc[HOURS[-1]] >= ES_PARAMS['soc_ini'])
 
     # --- objective function ---
     obj = 0
@@ -278,6 +277,25 @@ if res_no and res_yes:
     ax3.set_title('Impact on Conventional Generation')
     ax3.legend()
     ax3.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # --- fig 4: State of Charge (SoC) curve ---
+    fig4, ax4 = plt.subplots(figsize=(10, 5))
+    ax4.plot(HOURS, soc_yes, 'm-o', label='SoC Level (MWh)', linewidth=2, markersize=6)
+    
+    ax4.fill_between(HOURS, 0, soc_yes, color='magenta', alpha=0.1)
+    
+    ax4.set_xlabel('Hour of Day (0-23)', fontsize=12)
+    ax4.set_ylabel('State of Charge (MWh)', fontsize=12)
+    ax4.set_title('Energy Storage State of Charge (SoC) Profile over 24 Hours', fontsize=14)
+    
+    ax4.set_ylim(0, ES_PARAMS['cap'] * 1.1) 
+    
+    ax4.axhline(ES_PARAMS['cap'], color='red', linestyle='--', alpha=0.5, label='Max Capacity (600 MWh)')
+    
+    ax4.legend(loc='upper right')
+    ax4.grid(True, linestyle='--', alpha=0.5)
+    
     plt.tight_layout()
     plt.show()
     
