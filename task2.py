@@ -279,20 +279,20 @@ if res_no and res_yes:
     ax3.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    # --- fig 4: 独立 State of Charge (SoC) 曲线图 ---
+    # --- fig 4:  State of Charge (SoC) Curve ---
     fig4, ax4 = plt.subplots(figsize=(10, 5))
     ax4.plot(HOURS, soc_yes, 'm-o', label='SoC Level (MWh)', linewidth=2, markersize=6)
     
-    # 填充颜色让电量变化更直观
+    
     ax4.fill_between(HOURS, 0, soc_yes, color='magenta', alpha=0.1)
     
     ax4.set_xlabel('Hour of Day (0-23)', fontsize=12)
     ax4.set_ylabel('State of Charge (MWh)', fontsize=12)
     ax4.set_title('Energy Storage State of Charge (SoC) Profile over 24 Hours', fontsize=14)
     
-    # 设置Y轴范围，最高到电池容量的1.1倍以留出视觉空间
+    
     ax4.set_ylim(0, ES_PARAMS['cap'] * 1.1) 
-    # 画一条代表电池最大容量的水平虚线作为参考
+    
     ax4.axhline(ES_PARAMS['cap'], color='red', linestyle='--', alpha=0.5, label='Max Capacity (600 MWh)')
     
     ax4.legend(loc='upper right')
