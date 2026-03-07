@@ -281,135 +281,178 @@ for d in demands.id:
 
 print("=========================================================\n") 
 
+def calculate_balancing_market(
+    generators,
+    wind_farms,
+    demands,
+    supply,
+    pg,
+    pw,
+    pd,
+    market_price,
+    strategy=False,
+):
+    """Compute balancing market clearing price.
 
-# ===============================================================
-# 15. Market clearing with balancing market (--STEP 5--)
-# ===============================================================
+    Parameters
+    ----------
+    generators, wind_farms, demands, supply : pandas.DataFrame
+        Input datasets used to configure the optimization.
+    pg, pw, pd : Gurobi variables
+        Day‑ahead dispatch results (solutions already available via .X).
+    market_price : float
+        Day‑ahead market‑clearing price (EUR/MWh) used by the two‑price
+        scheme when appropriate.
+    strategy : bool, optional
+        ``False`` for the classic single‑price balancing market; ``True``
+        to activate the two‑price scheme. In the latter case the price is
+        replaced by ``market_price`` whenever one of the following two
+        conditions occurs:
 
-# --- Wind deviations ---
-wind_ids = list(wind_farms.id)
+          * there is a power deficit (imbalance > 0) and actual generation
+            exceeds the day‑ahead forecast; or
+          * there is a power surplus (imbalance < 0) and actual generation
+            is below the day‑ahead forecast.
 
-wind_realized = {}
+    Returns
+    -------
+    float
+        Balancing market clearing price (EUR/MWh).
+    """
+    # --- Wind deviations ---
+    wind_ids = list(wind_farms.id)
+    wind_realized = {}
+    for i, w in enumerate(wind_ids):
+        if i < 2:
+            wind_realized[w] = 0.85 * pw[w].X   # -15%
+        else:
+            wind_realized[w] = 1.10 * pw[w].X   # +10%
 
-for i, w in enumerate(wind_ids):
-    if i < 2:
-        wind_realized[w] = 0.85 * pw[w].X   # -15%
-    else:
-        wind_realized[w] = 1.10 * pw[w].X   # +10%
+    # --- Generator outage ---
+    gen_ids = list(generators.id)
+    outage_gen = gen_ids[7]  # outage in first generator
+    generators.loc[generators.id == outage_gen, 'capacity_MW'] = 0.0  # set capacity to zero
+    pg_realized = {}
+    for g in gen_ids:
+        if g == outage_gen:
+            pg_realized[g] = 0.0
+        else:
+            pg_realized[g] = pg[g].X
 
-# --- Generator outage ---
-gen_ids = list(generators.id)
-outage_gen = gen_ids[7]  # outage in first generator
-generators.loc[generators.id == outage_gen, 'capacity_MW'] = 0.0  # set capacity to zero
+    # Compute total imbalance
+    total_generation_realized = sum(pg_realized[g] for g in gen_ids) + \
+                                 sum(wind_realized[w] for w in wind_ids)
+    total_demand_DA = sum(pd[d].X for d in demands.id)
+    imbalance = total_demand_DA - total_generation_realized
 
-pg_realized = {}
+    print("\n===============================")
+    print("Intraday market clearance")
+    print("===============================")
+    print(f"Generator in outage: {outage_gen}")
+    print(f"System imbalance (MW): {imbalance:.2f}")
 
-for g in gen_ids:
-    if g == outage_gen:
-        pg_realized[g] = 0.0
-    else:
-        pg_realized[g] = pg[g].X
+    # ============================================================
+    # BALANCING MARKET OPTIMIZATION
+    # ============================================================
+    bal_model = gp.Model("BalancingMarket")
 
-# Compute total imbalance
-total_generation_realized = sum(pg_realized[g] for g in gen_ids) + \
-                             sum(wind_realized[w] for w in wind_ids)
+    # -------------------------
+    # Variables
+    # -------------------------
+    # Upward regulation generators
+    p_up = bal_model.addVars(generators.id, lb=0, name="production_upward")
 
-total_demand_DA = sum(pd[d].X for d in demands.id)
+    # Downward regulation generators
+    p_down = bal_model.addVars(generators.id, lb=0,
+                               ub=generators.set_index('id').capacity_MW,
+                               name="production_downward")
 
-imbalance = total_demand_DA - total_generation_realized
-print("\n===============================")
-print("Intraday market clearance")
-print("===============================")
-print(f"Generator in outage: {outage_gen}")
-print(f"System imbalance (MW): {imbalance:.2f}")
+    # Load curtailment
+    p_curt = bal_model.addVars(demands.id, lb=0, name="demand_curtailment")
 
-# ============================================================
-# BALANCING MARKET OPTIMIZATION
-# ============================================================
+    # Wind adjustments
+    p_wind = bal_model.addVars(wind_farms.id, lb=0,
+                               ub=[wind_realized[w] for w in wind_farms.id],
+                               name="wind_adjustment")
 
-bal_model = gp.Model("BalancingMarket")
+    # Upward and downward regulation prices
+    up_cost = {
+        g: 1.10 * generators.loc[generators.id == g, 'prod_cost_per_MWh'].values[0]
+        for g in generators.id
+    }
+    down_cost = {
+        g: 0.85 * generators.loc[generators.id == g, 'prod_cost_per_MWh'].values[0]
+        for g in generators.id
+    }
 
-# -------------------------
-# Variables
-# -------------------------
+    # -------------------------
+    # Objective (MINIMIZE)
+    # -------------------------
+    bal_model.setObjective(
+        gp.quicksum(up_cost[g] * p_up[g] for g in generators.id)
+        + gp.quicksum(
+            demands.loc[demands.id == d, 'curtailment_cost_per_MWh'].iloc[0] * p_curt[d]
+            for d in demands.id
+        )
+        - gp.quicksum(down_cost[g] * p_down[g] for g in generators.id),
+        GRB.MINIMIZE,
+    )
 
-# Upward regulation generators
-p_up = bal_model.addVars(generators.id, lb=0, name="production_upward")
+    # -------------------------
+    # Balancing constraint
+    # -------------------------
+    bal_constraint = bal_model.addConstr(
+        gp.quicksum(p_up[g] - p_down[g] for g in generators.id)
+        + gp.quicksum(p_curt[d] for d in demands.id)
+        + gp.quicksum(p_wind[w] for w in wind_farms.id)
+        == imbalance,
+        name="balancing_equation",
+    )
 
-# Downward regulation generators
-p_down = bal_model.addVars(generators.id, lb=0,
-                           ub = generators.set_index('id').capacity_MW,
-                           name="production_downward")
+    # -------------------------
+    # Capacity limits
+    # -------------------------
+    for g in generators.id:
+        cap = generators.loc[generators.id == g, 'capacity_MW'].values[0]
+        # Up limited by remaining headroom
+        bal_model.addConstr(pg_realized[g] + p_up[g] <= cap)
+        # Down limited by actual production
+        bal_model.addConstr(p_down[g] <= pg_realized[g])
+    for w in wind_farms.id:
+        bal_model.addConstr(p_wind[w] <= wind_realized[w])
+    for d in demands.id:
+        bal_model.addConstr(p_curt[d] <= pd[d].X)
 
-# Load curtailment
-p_curt = bal_model.addVars(demands.id, lb=0, name="demand_curtailment")
+    bal_model.optimize()
 
-# Wind adjustments
-p_wind = bal_model.addVars(wind_farms.id, lb=0,
-                           ub = [wind_realized[w] for w in wind_farms.id],
-                            name="wind_adjustment")
+    balancing_price = -bal_constraint.Pi
 
-# Upward and downward regulation prices
-up_cost = {
-    g: 1.10 * generators.loc[generators.id == g, 'prod_cost_per_MWh'].values[0]
-    for g in generators.id
-}
+    # apply two-price rules if requested
+    if strategy:
+        forecast_gen = sum(pg[g].X for g in generators.id)
+        realized_gen = sum(pg_realized[g] for g in gen_ids)
+        if (imbalance > 0 and realized_gen > forecast_gen) or (
+            imbalance < 0 and realized_gen < forecast_gen
+        ):
+            balancing_price = market_price
+            print("Two-price condition met, using day-ahead price")
 
-down_cost = {
-    g: 0.85 * generators.loc[generators.id == g, 'prod_cost_per_MWh'].values[0]
-    for g in generators.id
-}
+    print(
+        f"\nBalancing price with {'two' if strategy else 'single'}-price strategy: {balancing_price:.2f} EUR/MWh"
+    )
 
-# -------------------------
-# Objective (MINIMIZE)
-# -------------------------
+    return balancing_price
 
-bal_model.setObjective(
-    gp.quicksum(up_cost[g] * p_up[g] for g in generators.id)
-    + gp.quicksum(demands.loc[demands.id == d, 'curtailment_cost_per_MWh'].iloc[0] * p_curt[d] for d in demands.id)
-    - gp.quicksum(down_cost[g] * p_down[g] for g in generators.id),
-    GRB.MINIMIZE
+# choose strategy: False for single-price, True for two-price
+use_two_price = True
+balancing_price = calculate_balancing_market(
+    generators,
+    wind_farms,
+    demands,
+    supply,
+    pg,
+    pw,
+    pd,
+    market_price,
+    strategy=use_two_price,
 )
-
-# -------------------------
-# Balancing constraint
-# -------------------------
-
-bal_constraint = bal_model.addConstr(
-    gp.quicksum(p_up[g] - p_down[g] for g in generators.id)
-    + gp.quicksum(p_curt[d] for d in demands.id)
-    + gp.quicksum(p_wind[w] for w in wind_farms.id)
-    == imbalance,
-    name="balancing_equation"
-)
-
-# -------------------------
-# Capacity limits
-# -------------------------
-
-for g in generators.id:
-
-    cap = generators.loc[generators.id == g, 'capacity_MW'].values[0]
-
-    # Up limited by remaining headroom
-    bal_model.addConstr(
-        pg_realized[g] + p_up[g] <= cap
-    )
-
-    # Down limited by actual production
-    bal_model.addConstr(
-        p_down[g] <= pg_realized[g]
-    )
-for w in wind_farms.id:
-    bal_model.addConstr(
-        p_wind[w] <= wind_realized[w]
-    )
-
-for d in demands.id:
-    bal_model.addConstr(p_curt[d] <= pd[d].X)
-
-bal_model.optimize()
-
-balancing_price = -bal_constraint.Pi
-
-print(f"\nBalancing price with the single-price strategy: {balancing_price:.2f} EUR/MWh")
