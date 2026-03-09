@@ -579,8 +579,16 @@ def calculate_balancing_market(
                     else:
                         imb_revenue = deviation * balancing_price
             else:
-                # balancing service provider: profit from upward regulation and loss from downward regulation
-                imb_revenue = p_up[g].X * balancing_price - p_down[g].X * balancing_price
+                actual_mc = generators.loc[generators.id == g, 'prod_cost_per_MWh'].values[0]
+                # balance provider：
+                # TSO pays for upward regulation, charges for downward regulation, net cash flow is:
+                cash_flow = p_up[g].X * balancing_price - p_down[g].X * balancing_price
+                
+                # cost change due to deviation from DA schedule
+                cost_change = p_up[g].X * actual_mc - p_down[g].X * actual_mc
+                
+                # balancing market net profit
+                imb_revenue = cash_flow - cost_change
                 
             bal_profits["generators"][g] = imb_revenue
 
