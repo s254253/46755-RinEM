@@ -19,23 +19,13 @@ demands['bid_price_per_MWh'] = (
 )
 
 # Add reserve capacities and offer prices for regulation
-R_plus_map = {
-    1: 40, 2: 40, 3: 70, 4: 180, 5: 60, 6: 30,  # R_plus and R_minus are the same
-    7: 30, 8: 0, 9: 0, 10: 0, 11: 60, 12: 40
-}
-
-C_plus_map = {
-    1: 15, 2: 15, 3: 24, 4: 25, 5: 28, 6: 16,
-    7: 16, 8: 0, 9: 0, 10: 0, 11: 14, 12: 16
-}
-
-C_minus_map = {
-    1: 11, 2: 11, 3: 16, 4: 17, 5: 23, 6: 7,
-    7: 7, 8: 0, 9: 0, 10: 0, 11: 8, 12: 8
-}
+R_plus_map = generators.set_index('id')['max_up_res_MW'].to_dict()
+R_minus_map = generators.set_index('id')['max_down_res_MW'].to_dict()
+C_plus_map = generators.set_index('id')['up_res_cost_per_MW'].to_dict()
+C_minus_map = generators.set_index('id')['down_res_cost_per_MW'].to_dict()
 
 generators["R_plus"] = generators["id"].map(R_plus_map)
-generators["R_minus"] = generators["id"].map(R_plus_map)
+generators["R_minus"] = generators["id"].map(R_minus_map)
 generators["C_plus"] = generators["id"].map(C_plus_map)
 generators["C_minus"] = generators["id"].map(C_minus_map)
 # ============================================================
@@ -88,6 +78,11 @@ down_res_req = reserve_model.addConstr(
     name="DownwardReserveRequirement"
 )
 
+# Capacity constraints for reserves
+P_max = generators.set_index("id")["capacity_MW"].to_dict()
+for g in generators.id:
+    reserve_model.addConstr(r_up[g] + r_down[g] <= P_max[g], name=f"ReserveCapacity_{g}")
+
 reserve_model.optimize()
 
 reserve_up_price_clearing = up_res_req.Pi
@@ -107,12 +102,14 @@ reserve_model.optimize()
 if reserve_model.status == GRB.OPTIMAL:
     reserve_up_price_clearing = up_res_req.Pi
     reserve_down_price_clearing = down_res_req.Pi
+    reserve_market_sw = reserve_model.ObjVal
 else:
     print("Reserve model did not solve to optimality.")
 
 print('\n================ RESERVE MARKET RESULTS ================')
 print(f"Upward reserve clearing price: {up_res_req.Pi:.2f} EUR/MW")
 print(f"Downward reserve clearing price: {down_res_req.Pi:.2f} EUR/MW")
+print(f"Social welfare for reserve market: {reserve_model.objVal:.2f} EUR")
 
 print("\nReserve provision by generator:")
 for g in generators.id:
@@ -189,8 +186,11 @@ power_balance = model.addConstr(
 model.optimize()
 
 market_price = power_balance.Pi
+day_ahead_sw = model.ObjVal
+total_social_welfare = day_ahead_sw - reserve_market_sw
 print('\n================ DAY-AHEAD RESULTS ================')
 print(f"Day-ahead market clearing price: {market_price:.2f} EUR/MWh")
+print(f"Social welfare for European day-ahead market: {total_social_welfare:.2f} EUR ")
 
 for g in generators.id:
     output = pg[g].X
@@ -328,6 +328,7 @@ if USReserve_model.status == GRB.OPTIMAL:
     print(f"Upward reserve clearing price: {US_reserve_up_price_clearing:.2f} EUR/MW")
     print(f"Downward reserve clearing price: {US_reserve_down_price_clearing:.2f} EUR/MW")
     print(f"Day-ahead market clearing price: {US_market_price:.2f} EUR/MWh")
+    print(f"Social welfare for American day-ahead market: {USReserve_model.objVal:.2f} EUR")
 
     print("\nGenerator schedules:")
     for g in generators.id:
