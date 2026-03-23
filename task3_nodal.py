@@ -18,7 +18,7 @@ wind_farms['prod_cost_per_MWh'] = 0.0
 wind_farms.rename(columns={'day_ahead_forecast_MW': 'capacity_MW'}, inplace=True)
 
 demands['bid_price_per_MWh'] = (
-    (np.exp(-np.linspace(0, 5, len(demands))) - np.exp(-6))
+    (np.exp(-np.linspace(0, 3.5, len(demands))) - np.exp(-6))
     / (1 - np.exp(-6))
     * 237
 )
