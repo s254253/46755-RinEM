@@ -1,11 +1,21 @@
 Data Sources: 
 I used wind capacity factors from Renewables.ninja (DK2 region, 2024) 
 and retrieved day-ahead spot prices directly from the Energi Data Service (Energinet) API.
+###
+   In the refered website 
+   "https://data.nordpoolgroup.com/auction/day-ahead/prices?deliveryDate=latest&currency=EUR&aggregation=Hourly&deliveryAreas=AT",
+   It seems like you need subscribe before you can download the data excel tables, so here I use data from Energinet.
+   If you access the data from the above website, feel free to modify. OWO
+###
 
 Scenario Reduction (K-Means):
 Instead of random sampling, I used K-Means clustering to extract 20 representative daily profiles for both wind and prices. 
 This captures the full distribution of market volatility, including price spikes and extreme wind conditions, 
 more effectively than blind sampling.
+###
+   Here I output figures to show which dates are chosen (those colorful waves) comparing with normal dates (grey waves), 
+   both for wind_gene and day-ahead price.
+###
 
 Scaling & Probabilities:
 The wind data is scaled to our required 500 MW capacity. 
