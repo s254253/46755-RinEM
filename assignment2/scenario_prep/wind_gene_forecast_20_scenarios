@@ -1,0 +1,105 @@
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances_argmin_min
+from collections import Counter
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import os
+
+# Set temporary directory for PyPSA or large data processing
+temp_dir = 'C:\\Temp_PyPSA'
+os.makedirs(temp_dir, exist_ok=True)
+os.environ['TMP'] = temp_dir
+os.environ['TEMP'] = temp_dir
+
+# ==========================================
+# 1. Basic Data Loading and Processing (Wind Power)
+# ==========================================
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+
+file_path = 'ninja-wind-country-DK-current_total-merra2.csv'
+capacity_mw = 500
+n_clusters = 20
+
+print("Reading and processing wind power data...")
+df = pd.read_csv(file_path, skiprows=3)
+df['time'] = pd.to_datetime(df['time'])
+
+# Filtering for the year 2024
+df_2024 = df[df['time'].dt.year == 2024].copy()
+df_2024['date'] = df_2024['time'].dt.date
+df_2024['hour'] = df_2024['time'].dt.hour
+
+# Pivot to create daily profiles (rows: date, columns: hour)
+daily_profiles = df_2024.pivot(index='date', columns='hour', values='DK02').dropna()
+
+# ==========================================
+# 2. K-Means Clustering and Weight Calculation
+# ==========================================
+print(f"Extracting {n_clusters} representative wind power days using K-Means...")
+kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+kmeans.fit(daily_profiles.values)
+
+# Find the historical days closest to the cluster centers (medoids)
+closest_indices, _ = pairwise_distances_argmin_min(kmeans.cluster_centers_, daily_profiles.values)
+
+# Calculate the probability (weight) of each cluster
+labels = kmeans.labels_
+total_days = len(labels)
+cluster_counts = Counter(labels)
+probabilities = [cluster_counts[i] / total_days for i in range(n_clusters)]
+
+# ==========================================
+# 3. Data Extraction and CSV Export
+# ==========================================
+representative_profiles = daily_profiles.iloc[closest_indices]
+scenarios_mw = representative_profiles.values * capacity_mw
+
+columns = [f'Hour_{h}' for h in range(1, 25)]
+index = [f'Scenario_{i+1}' for i in range(n_clusters)]
+result_df = pd.DataFrame(scenarios_mw, columns=columns, index=index)
+
+# Inserting metadata columns
+result_df.insert(0, 'Representative_Date', representative_profiles.index.values)
+result_df.insert(1, 'Cluster_ID', range(1, n_clusters + 1))
+result_df.insert(2, 'Probability', probabilities)
+
+output_file = 'wind_20_scenarios_kmeans_weighted_500MW.csv'
+result_df.to_csv(output_file)
+print(f"Success! Weighted wind power CSV saved to: {output_file}")
+
+# ==========================================
+# 4. Visualization: Spaghetti Plot
+# ==========================================
+print("Generating wind power visualization charts...")
+plt.figure(figsize=(14, 7))
+
+# Background: All historical daily profiles for the year
+all_historical_mw = daily_profiles.values * capacity_mw
+for i in range(len(all_historical_mw)):
+    label = 'Historical Scenarios' if i == 0 else "_nolegend_"
+    plt.plot(range(1, 25), all_historical_mw[i], color='gray', alpha=0.15, linewidth=1, label=label)
+
+# Foreground: The 20 reduced representative scenarios
+colors = cm.get_cmap('tab20', n_clusters)
+for i in range(n_clusters):
+    label = 'Reduced Scenarios (20 typical days)' if i == 0 else "_nolegend_"
+    plt.plot(range(1, 25), scenarios_mw[i], color=colors(i), linewidth=3, alpha=0.85, label=label)
+
+plt.title('Wind Power Scenario Reduction via K-Means Clustering (DK2, 500MW)', fontsize=16, fontweight='bold')
+plt.xlabel('Hour of the Day', fontsize=14)
+plt.ylabel('Wind Power Generation (MW)', fontsize=14)
+plt.xticks(range(1, 25))
+plt.xlim(1, 24)
+plt.ylim(0, 520)
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.legend(fontsize=12, loc='upper right')
+
+# Save outputs
+plt.savefig('Wind_Scenario_Reduction_Plot.png', dpi=300, bbox_inches='tight')
+plt.savefig('Wind_Scenario_Reduction_Plot.pdf', bbox_inches='tight')
+plt.show()
+
+print("Charts saved successfully!\n")
