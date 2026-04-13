@@ -1,0 +1,25 @@
+Data Sources: 
+I used wind capacity factors from Renewables.ninja (DK2 region, 2024) 
+and retrieved day-ahead spot prices directly from the Energi Data Service (Energinet) API.
+
+Scenario Reduction (K-Means):
+Instead of random sampling, I used K-Means clustering to extract 20 representative daily profiles for both wind and prices. 
+This captures the full distribution of market volatility, including price spikes and extreme wind conditions, 
+more effectively than blind sampling.
+
+Scaling & Probabilities:
+The wind data is scaled to our required 500 MW capacity. 
+I also calculated the true probabilities for each cluster based on their historical frequency in 2024 (Cardinality/366).
+The line "Cluster_ID" can be seen as weight of each scenarios.
+
+Joint Scenarios:
+I performed a Cartesian product of the 20 wind scenarios, 20 price scenarios, and 4 randomly generated System Imbalance (SI) states. 
+This resulted in a final set of 1,600 joint scenarios, each with a specific joint probability and 
+calculated Balancing Price (BP): 
+   Calculate BP based on assignment rules:
+   If SI=1 (deficit), BP = 1.25 * DA price
+   If SI=0 (surplus), BP = 0.85 * DA price
+
+Output: 
+The final input file for our optimization model is "final_1600_scenarios_input.csv". 
+It contains 38,400 rows (1600 scenarios × 24 hours)
