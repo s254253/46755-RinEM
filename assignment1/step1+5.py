@@ -170,10 +170,10 @@ plt.step(
     color='black',
     label='Demand'
 )
-plt.xlabel('Quantity (MW)')
-plt.ylabel('Price (EUR/MWh)')
+plt.xlabel('Quantity (MW)', fontsize = 15)
+plt.ylabel('Price (EUR/MWh)', fontsize = 15)
 plt.title('Merit-Order Supply and Demand Curves')
-plt.legend()
+plt.legend(fontsize = 15)
 plt.grid(True)
 plt.show()
 
