@@ -115,9 +115,10 @@ def run_task_1_1():
         for t in hours:
             optimal_bids[t] = P_DA[t].X
 
-    return optimal_bids
+    return optimal_bids, m.objVal
 
 
 if __name__ == "__main__":
-    bids = run_task_1_1()
+    bids, obj_val = run_task_1_1()
     print("Task 1.1 completed.")
+    print(f"Optimal objective value: {obj_val}")
