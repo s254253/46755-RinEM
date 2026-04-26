@@ -14,7 +14,9 @@ optimal_bids_11 = run_task_1_1()
 # ==========================================
 script_dir = os.path.dirname(os.path.abspath(__file__))
 file_name = 'final_1600_scenarios_input.csv'
-df_path = os.path.join(script_dir, file_name)
+df_path = os.path.abspath(
+    os.path.join(script_dir, '..', 'scenario_prep', file_name)
+)
 
 df = pd.read_csv(df_path)
 hours = df['Hour'].unique()

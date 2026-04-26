@@ -19,7 +19,7 @@ os.environ['TEMP'] = temp_dir
 script_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_dir)
 
-file_path = 'ninja-wind-country-DK-current_total-merra2.csv'
+file_path = 'ninja-wind-country-DK-current_total-merra2'
 capacity_mw = 500
 n_clusters = 20
 
